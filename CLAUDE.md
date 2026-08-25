@@ -27,7 +27,7 @@ Two different things here — don't conflate them. **Filesystem state** (is the 
 Concretely, if not already known from this conversation, ask the user:
 - **Environment**: NERSC/Shifter or Docker?
 - **EveNet-Full**: ask whether to install a fresh clone or use one they already have — don't assume either way.
-  - **Fresh install**: don't ask for a path — follow `setup.md` Step 2 to clone it (and pin the `evenet` submodule) yourself, then use that resulting path for the rest of the session.
+  - **Fresh install**: don't ask for a path — follow `setup.md` Step 2 to clone it yourself, then use that resulting path for the rest of the session.
   - **Existing repo**: ask for the absolute path, then validate it rather than trusting it at face value (see filesystem checks below) — a path existing isn't the same as it being a complete, working EveNet-Full checkout.
 - **Container image** — default `docker.io/avencast1994/evenet:1.5`; on NERSC this may instead be a `registry.nersc.gov/<project>/avencast/evenet:<tag>` mirror — confirm which, don't assume
 - **W&B project name** for this session's runs (and API key, if not already set as an env var — check `echo $WANDB_API_KEY` before asking, don't ask for something already present)
@@ -35,7 +35,7 @@ Concretely, if not already known from this conversation, ask the user:
 
 Then check the filesystem, don't assume:
 - `EveNet-Full` is actually present at the path in hand (freshly cloned or user-provided) — for a user-provided path, don't stop at "the directory exists": confirm it looks like a real EveNet-Full checkout (e.g. `scripts/train.py`, `evenet/` submodule populated, `share/` templates present) before relying on it, since a wrong or partial path will otherwise surface as a confusing failure much later in the pipeline instead of here
-- The `evenet` submodule inside it is pinned to a verified-working commit (`git -C <evenet_full>/evenet log -1 --oneline`) — its default branch has shipped at least one undocumented regression before (see `setup.md` Step 2 for what to check it against); this applies equally to a freshly-cloned repo and a user-provided existing one — neither is automatically safe to use
+- The `evenet` submodule inside `EveNet-Full` hasn't drifted from what the outer repo's own tree expects (`git -C <evenet_full> submodule status` — no `+`/`-` prefix on the `evenet` line; see `setup.md` Step 2). The outer repo's tree is the authoritative record of which submodule commit goes with which outer-repo commit, so a mismatch here is a real risk, not a formality; this applies equally to a freshly-cloned repo and a user-provided existing one — neither is automatically safe to use
 - The container image is actually present (`shifterimg images` on NERSC / `docker images` on Docker) — `physics-planner` will fail its first real step without this, since it needs a working container to inspect the input data (ROOT or `.pt`)
 - `Weights/` (at `<parent-of-EveNet-Full>/Weights`, per `setup.md` Step 5 — or wherever the user has explicitly told you the checkpoints live) has both pretrained checkpoints; don't search other directories for them, per the filesystem-scope rule above
 

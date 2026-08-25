@@ -1,5 +1,15 @@
 platform:
   data_parquet_dir: <data_parquet_test_dir>
+  # Template defaults below (number_of_workers/resources_per_worker/batch_size)
+  # are placeholders, not a real starting point -- override per predictor.md's
+  # standalone flow (or fine-tuner.md's "Generate the predict YAML" step for
+  # the combined-job case): number_of_workers/resources_per_worker should
+  # default to matching the finetune YAML's (so prediction uses the same
+  # scale of Ray cluster the checkpoint was trained at, not a fraction of it),
+  # and batch_size should default to matching too unless the event counts
+  # suggest a clearly better value. Report the chosen values to the
+  # orchestrator for confirmation before submitting -- don't leave these at
+  # 1/CPU:1/GPU:1/4 for anything beyond a toy run.
   number_of_workers: 1
   resources_per_worker: {
     "CPU": 1,
@@ -50,10 +60,27 @@ options:
         # whichever head(s) were enabled in the finetune YAML — this must match
         # the trained checkpoint's active heads, not be chosen independently.
         include: false
+        # diffusion_steps: 2 (the template default) is a smoke-test value, not
+        # a real one -- found directly to cause a numerical-domain crash
+        # (Normal.cdf on a non-finite value) during DDIM sampling at inference
+        # time on a real checkpoint. Match whichever value the finetune YAML
+        # used for this head (typically 200) -- that's the only value with
+        # actual proof of numerical stability for a given fine-tuned checkpoint,
+        # since training's own periodic diffusion eval already exercised it
+        # successfully across the whole run.
         diffusion_steps: 2
 
     EMA:
       enable: true
+      # replace_model_after_load: true is the correct default (use the raw
+      # fine-tuned weights, not an EMA shadow that may be undertrained for a
+      # short fine-tune run) -- don't set this to false without a specific,
+      # confirmed reason. An earlier investigation suspected EMA undertraining
+      # as a cause of a prediction-time crash on a real analysis; that theory
+      # was never confirmed and didn't hold up mechanistically -- the actual
+      # fix for that crash was unrelated (a data-composition/positional-
+      # embedding mismatch and a non-numeric column reaching Ray's batch
+      # collation).
       replace_model_after_load: true
 
   Dataset:

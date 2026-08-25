@@ -10,30 +10,24 @@ Ask the user whether they are on:
 
 Record the environment type for use by the rest of the pipeline.
 
-## Step 2: Clone the EveNet repository, and pin the `evenet` submodule
+## Step 2: Clone the EveNet repository
 
 ```bash
 git clone --recursive https://github.com/EveNet-HEP/EveNet-Full.git
 cd EveNet-Full
 ```
 
-**Then pin the `evenet` submodule to the last verified-working commit — don't leave it on whatever HEAD the clone happened to pull:**
+**No manual pin.** Use `main` for the outer repo, and whatever commit the outer repo's own tree references for the `evenet` submodule (i.e. plain `--recursive`/`git submodule update --init`, not a separately-chosen submodule commit) — the submodule pointer inside the outer repo's tree is the authoritative pairing, so don't override it with an independently-chosen `evenet` commit. Verify this pairing rather than assuming it:
 
 ```bash
-cd evenet
-git checkout b6518dc
-cd ..
+git -C EveNet-Full submodule status
 ```
 
-**Why**: `EveNet-HEP/Core`'s default branch has shipped a regression before. Commit `d2aa1fa` (2026-04-20, "update analysis.yaml and train.yaml to change pt normalization method and adjust neutrino binning parameters...") silently swapped the invisible-particle (`TruthGeneration`) feature-padding scheme for a learned `InvisibleInputProjector`, but never updated `Normalizer.denormalize()`'s padding-removal logic to match — the result is a `padding_size=0` case that Python's `x[:-0]` slicing (which means "keep nothing," not "remove nothing") turns into a 0-length tensor, crashing any `TruthGeneration` analysis's validation step and `predict.py` with a broadcast `RuntimeError`. None of this is mentioned in the commit message, so it's not something a changelog skim would catch. Discovered 2026-08-17 by diffing a freshly-cloned, broken install against `EveNet-photon` (an older install pinned at `b6518dc`, which predates the regression and works).
+No `+` (or `-`) prefix on the `evenet` line means the checked-out submodule commit matches what the outer repo's tree expects — safe. A `+` prefix means they've drifted apart (e.g. someone `git checkout`'d the submodule to a different commit by hand without updating the outer repo, or vice versa) — run `git submodule update --init` to snap it back to what the outer repo's tree actually pins, rather than leaving the mismatch or guessing which side is "right."
 
-If the repo is already cloned, don't assume it's safe — check the submodule's actual commit before trusting it:
+A checkpoint fine-tuned under one `evenet` commit may not load under a different one if the model architecture changed in between (missing/mismatched-shape keys in the state dict). If that happens, retrain rather than expect a code-level fix to bridge the two versions.
 
-```bash
-cd EveNet-Full/evenet && git log -1 --oneline
-```
-
-If it's not at `b6518dc` (or a later commit you've separately verified doesn't have this bug — e.g. by confirming EveNet-HEP/Core fixed the padding regression upstream, or by running a `TruthGeneration` analysis through a full validation epoch without the `Normalizer.denormalize` crash), check out `b6518dc` as above before proceeding. Skip the clone step itself if already cloned, but don't skip the pin check.
+If the repo is already cloned, don't assume it's safe — run the `submodule status` check above before trusting it, and pull `main` on the outer repo too if it looks stale (check `git -C EveNet-Full fetch origin main && git -C EveNet-Full log --oneline HEAD..origin/main` — anything listed means you're behind).
 
 ## Step 3: Pull the container image
 
