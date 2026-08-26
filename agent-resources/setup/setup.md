@@ -43,11 +43,14 @@ shifterimg pull docker.io/avencast1994/evenet:1.5
 
 ## Step 4: Configure W&B credentials
 
-Ask the user for:
-- `WANDB_API_KEY`: Users register at https://wandb.ai/ to get their API key.
+**Check first, don't ask blind**: `echo $WANDB_API_KEY` — if it's already set, it's already usable, skip straight to asking for `WANDB_PROJECT` only.
+
+**If it's not set, don't accept it typed into chat and use it ad hoc.** `WANDB_API_KEY` needs to already be in the environment the Claude Code session itself was launched with, not something provided mid-session — every Bash command this pipeline runs is subject to a permission-layer block on literal secrets appearing in the command text, so a key that exists only as chat text (not as an inherited env var) can't actually be used later where it's needed: `fine-tuner` submits jobs via `export WANDB_API_KEY=... && sbatch ...` in one command, which hits this block if the value has to be typed into it. Tell the user to export it in their shell — ideally a persistent profile like `~/.bashrc` so it survives across sessions — and start a new Claude Code session, rather than pasting the raw value into the conversation. See the top-level `README.md`'s "Install" section for the exact steps; point the user there rather than re-explaining it here. The mechanism: the user's shell exports it before launching `claude`, the `claude` process inherits it, and every subprocess it spawns (including all Bash tool calls) inherits it too via normal process environment inheritance — so the literal value never needs to appear in any command text.
+
+Also ask for:
 - `WANDB_PROJECT`: A descriptive project name chosen by the user.
 
-Record these for use by the rest of the pipeline (do not store API keys in any committed file).
+Record the project name for use by the rest of the pipeline. Never write the API key itself to any file, committed or not.
 
 ## Step 5: Download pretrained weights
 

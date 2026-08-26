@@ -1,6 +1,6 @@
 ---
 name: data-converter
-description: Converts ROOT or .pt input into EveNet's point-cloud npz/parquet format, using the slot mapping, targets, and split mode from an approved physics-planner plan. Only runs after the user has explicitly approved the plan. No GPU needed.
+description: Converts ROOT, .pt, or h5 input into EveNet's point-cloud npz/parquet format, using the slot mapping, targets, and split mode from an approved physics-planner plan. Only runs after the user has explicitly approved the plan. No GPU needed.
 tools: Read, Write, Edit, Bash
 ---
 
@@ -56,6 +56,8 @@ Write `<run_dir>/data_processed/npz/to_npz.py`, implementing the plan's slot map
 
 **If the plan's input format is `.pt`**: use `torch.load(path, map_location='cpu', weights_only=False)` against the field names/structure `physics-planner` actually found (don't assume it matches the ROOT convention). Accept `--input_dir`, `--output_dir` as CLI arguments — same as ROOT, process every `.pt` file found in the directory (if the user's data is a single `.pt` file, treat `--input_dir` as that file's parent directory, matching the same "process everything found here" convention as ROOT rather than introducing a separate single-file argument the shell templates don't actually pass). No `--tree_name` (that's a ROOT-only concept).
 
+**If the plan's input format is h5**: use `h5py.File(path, 'r')` against the field/column/group names `physics-planner` actually found (schema varies by dataset — don't assume it matches any other analysis's h5 layout, always use exactly what the plan states). Accept `--input_dir`, `--output_dir` as CLI arguments — same "process everything found here" convention as ROOT/`.pt`, process every `.h5` file found in the directory. No `--tree_name` (ROOT-only concept). Note that `data-reconverter` will later re-read these same h5 files (for its own event-matching step) and, per the plan's Output section, may also need to pull additional raw fields (e.g. truth-level branches not part of the point cloud) from that same read — so if the plan calls for that, make sure `process_file`'s h5-reading logic (or a sibling function alongside it) exposes what `data-reconverter` will need, not just the slot-mapped `x`/`x_mask` fields.
+
 **Structure it so `data-reconverter` can import and reuse the read/slot-mapping logic later** — put the per-file "read input, build `x`/`x_mask` (and the other per-event tensors)" logic in a standalone function (e.g. `process_file(path, ...)`), separate from the CLI/split/save code in `if __name__ == "__main__":`. `data-reconverter` needs to call exactly this function directly (not reimplement it) to rebuild the feature array for event-matching later — if it's all written inline under `__main__` with no importable function, that import will simply fail.
 
 The script must, for either format:
@@ -84,7 +86,7 @@ Copy `.claude/agent-resources/data-converter/preprocess.sh` to `<run_dir>/prepro
 
 ## Step 5: Run data preparation (inside container, no GPU)
 
-Copy `data_prep_nersc.sh` or `data_prep_docker.sh` from `.claude/agent-resources/data-converter/`, fill placeholders (`<evenet_full>`, `<container_image>`, `<input_data_dir>`, `<project_name>` — the templates `cd` into `run/<project_name>/` rather than bare `run/`). **`<tree_name>` only applies if the plan's input format is ROOT** — the templates pass it as a `--tree_name` flag conditionally; if the input is `.pt`, drop that flag from the `to_npz.py` invocation entirely rather than passing an empty/placeholder value. Run it. **Read the preprocessing log output carefully** — it states exactly which features get `log1p` applied automatically (look for `"Applying np.log1p to log-scale features"`); cross-check this against what Step 3's script already did, and fix+rerun if you find a mismatch (double-application or missing application) rather than assuming it's correct.
+Copy `data_prep_nersc.sh` or `data_prep_docker.sh` from `.claude/agent-resources/data-converter/`, fill placeholders (`<evenet_full>`, `<container_image>`, `<input_data_dir>`, `<project_name>` — the templates `cd` into `run/<project_name>/` rather than bare `run/`). **`<tree_name>` only applies if the plan's input format is ROOT** — the templates pass it as a `--tree_name` flag conditionally; if the input is `.pt` or h5, drop that flag from the `to_npz.py` invocation entirely rather than passing an empty/placeholder value. Run it. **Read the preprocessing log output carefully** — it states exactly which features get `log1p` applied automatically (look for `"Applying np.log1p to log-scale features"`); cross-check this against what Step 3's script already did, and fix+rerun if you find a mismatch (double-application or missing application) rather than assuming it's correct.
 
 Verify outputs exist:
 - Standard: `data_processed/npz/{train,val,test}.npz`

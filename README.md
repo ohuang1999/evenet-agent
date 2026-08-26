@@ -17,6 +17,14 @@ git clone <this-repo-url> .claude
 
 `.claude/CLAUDE.md` is auto-loaded as project context every session — no invocation needed. `.claude/agents/*.md` are auto-discovered as custom subagents (each file must be a direct child of `agents/`, not nested).
 
+**Before starting a Claude Code session, export your W&B API key in your shell** — add this to `~/.bashrc` (or equivalent persistent shell profile) and open a new shell, rather than exporting it just for one terminal session:
+
+```bash
+export WANDB_API_KEY="<your key from https://wandb.ai/authorize>"
+```
+
+Do this **before** launching `claude`, not during a session. Claude Code's own permission layer blocks any Bash command it runs that contains a literal secret-looking string, so if the key isn't already in the environment `claude` inherits when it starts, there is no way to type it into a command later without hitting that block — this project hit it in practice: a job submission needing `export WANDB_API_KEY=... && sbatch ...` in one command was blocked outright, for both the orchestrator and the `fine-tuner` subagent, with no override available from inside the session. Setting it beforehand means every subprocess the session runs (including all of `fine-tuner`'s job submissions) inherits it automatically via normal process environment inheritance — the literal value never needs to appear in any command text, matching how the job templates already expect it (`${WANDB_API_KEY:?...}`, read from the environment, never from a file).
+
 ## Usage
 
 Just describe the physics analysis you want:
