@@ -12,6 +12,8 @@ Subagents invoked via the `Agent` tool run to completion and return a result —
 
 Only read, write, or search inside the directory Claude Code was opened in, plus any absolute path the user explicitly gives you (input data location, an existing `EveNet-Full` path, a weights directory, etc.). Never `find`/`ls`/`grep` sibling directories on your own initiative to "discover" things — an existing `EveNet-Full` install, downloaded weights, a reference repo to diff a bug against — even when it would be genuinely useful. If something you need isn't at a path the user has already given you, ask for the path rather than going looking for it yourself. This applies to what you tell subagents to do too — don't hand one a task that requires it to explore beyond paths it's been explicitly given.
 
+**One standing exception: the HEP wiki.** `/global/cfs/cdirs/m2616/ohuang/HEP-agent-memeory/.claude` is a read-only knowledge base (the `agentic_AI` LLM-wiki) that `physics-planner` may consult when planning an analysis. It is in scope for reading and searching — by you and by `physics-planner` — without the user having to name it. It is **never** written to by any agent in this pipeline: no edits, no new pages, no `wiki/log.md` entries. If it isn't present at that path, say so and continue without it; a missing wiki degrades the plan's provenance, it doesn't block the pipeline.
+
 ## Step 0: Get the physics request
 
 If not already stated in the conversation, this is the first thing to ask — everything else is plumbing in service of this. Ask the user (one message):
@@ -33,6 +35,8 @@ Concretely, if not already known from this conversation, ask the user:
 - **W&B project name** for this session's runs (and API key, if not already set as an env var — check `echo $WANDB_API_KEY` before asking, don't ask for something already present)
 - **NERSC account** (NERSC only, e.g. `m2616`)
 
+The HEP wiki root is fixed (`/global/cfs/cdirs/m2616/ohuang/HEP-agent-memeory/.claude`) — don't ask for it. Just confirm it exists (`ls <wiki>/wiki/index.md`) alongside the other filesystem checks, and note it if absent.
+
 Then check the filesystem, don't assume:
 - `EveNet-Full` is actually present at the path in hand (freshly cloned or user-provided) — for a user-provided path, don't stop at "the directory exists": confirm it looks like a real EveNet-Full checkout (e.g. `scripts/train.py`, `evenet/` submodule populated, `share/` templates present) before relying on it, since a wrong or partial path will otherwise surface as a confusing failure much later in the pipeline instead of here
 - The `evenet` submodule inside `EveNet-Full` hasn't drifted from what the outer repo's own tree expects (`git -C <evenet_full> submodule status` — no `+`/`-` prefix on the `evenet` line; see `setup.md` Step 2). The outer repo's tree is the authoritative record of which submodule commit goes with which outer-repo commit, so a mismatch here is a real risk, not a formality; this applies equally to a freshly-cloned repo and a user-provided existing one — neither is automatically safe to use
@@ -46,6 +50,7 @@ If anything is missing, read and follow `.claude/agent-resources/setup/setup.md`
 Call the `Agent` tool with `subagent_type: "physics-planner"`, `run_in_background: false` (you need its plan before doing anything else — this is exactly the case where waiting in the foreground is correct). Give it:
 - The physics prompt and input data location from Step 0
 - The session context from Step 1: environment, EveNet-Full path, container image, W&B project, NERSC account
+- The HEP wiki root (`/global/cfs/cdirs/m2616/ohuang/HEP-agent-memeory/.claude`), and whether you confirmed it's present — it consults it read-only and cites what it used
 
 It will determine or propose everything else itself: tree name (by inspecting the file — it should list available trees rather than needing one stated, and only escalate to "Open questions" if genuinely ambiguous), project/run name (proposed from the physics goal), slot mapping, targets, split mode, wall time, checkpoint, and output naming — all shown in its plan for you to relay in Step 3.
 
@@ -57,7 +62,7 @@ Show the plan `physics-planner` returned to the user, formatted as it produced i
 
 Stop here. Do not invoke `data-converter` or any later subagent in the same turn. This is a hard gate, not a formality. If the user answers open questions or asks for changes, re-invoke `physics-planner` with that feedback to get a revised plan (this is also the mechanism for anything downstream would otherwise have needed to "ask" about — resolve it here, before the pipeline starts, not mid-flight).
 
-**Once approved, save the plan before invoking anything else.** `physics-planner` is an LLM — a later re-invocation on the same prompt isn't guaranteed to reproduce the same plan, so the approved plan text is the only persistent, reproducible record of what was actually decided (head choice, slot mapping, observable definition, everything). Every downstream subagent's numeric output is deterministic given a *fixed* plan (data-converter's split uses a fixed seed; nothing else in the pipeline is stochastic) — the plan itself is the one part that could otherwise only be reconstructed from chat history, which won't always be available. `mkdir -p <evenet_full>/run/<project_name>/` and write the exact approved plan text to `<evenet_full>/run/<project_name>/plan.md` yourself, right here — don't leave it for `data-converter` to do as a side effect of its own setup.
+**Once approved, save the plan before invoking anything else.** `physics-planner` is an LLM — a later re-invocation on the same prompt isn't guaranteed to reproduce the same plan, so the approved plan text is the only persistent, reproducible record of what was actually decided (head choice, slot mapping, observable definition, everything). Every downstream subagent's numeric output is deterministic given a *fixed* plan (data-converter's split uses a fixed seed; nothing else in the pipeline is stochastic) — the plan itself is the one part that could otherwise only be reconstructed from chat history, which won't always be available. `mkdir -p <evenet_full>/run/<project_name>/` and write the exact approved plan text to `<evenet_full>/run/<project_name>/plan.md` yourself, right here — don't leave it for `data-converter` to do as a side effect of its own setup. The plan's **Wiki consulted** section is part of that record — keep it verbatim, including the wiki commit SHA (`git -C <wiki> rev-parse --short HEAD`, or `no-git`/`unavailable`), so a decision can later be audited against the wiki as it stood at the time rather than as it reads today.
 
 ## Step 5: Run the pipeline in order
 
