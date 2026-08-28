@@ -27,6 +27,10 @@ Submitting: compute `<total_gpus>` = `number_of_workers × resources_per_worker[
 
 **Docker**: `python scripts/predict.py share/predict_<project_name>.yaml`, sized the same way.
 
+**Guard against fully-empty-point-cloud events before submitting.** Before running predict, check whether the predict input contains events where the *entire* visible input point cloud `x` is padding — every slot across every object type in this analysis's slot mapping is `mask=False`. This is a general architectural gap in the shared `PETBody` transformer (not specific to any particular slot composition): its first attention layer produces `NaN` for a query row with zero valid keys to attend to, and that `NaN` survives re-masking (`NaN × 0 = NaN`), propagating through every layer and crashing `Normal.cdf()` during diffusion sampling (or silently corrupting output for non-diffusion heads). It can only happen on uncut predict data — a training cut guaranteeing at least one real object prevents it, but a standalone predict run may target an unselected population where it occurs, even at a very low rate.
+
+Count events in the predict-target parquet where the sum of all point-cloud masks is zero. If any exist, filter them out of the predict input before submitting rather than letting the job crash partway through (an event with no reconstructed objects of any kind can't satisfy any downstream physics selection anyway, so nothing is lost). Report the count/fraction filtered to the orchestrator.
+
 **Monitor to completion before validating** — the same way `fine-tuner.md` Step 5 does: on NERSC, poll `squeue -j <JOB_ID> --noheader`, `ScheduleWakeup` if still listed (check `squeue -p <partition> --noheader | wc -l` once to gauge congestion and pick an interval, e.g. ~1200s if queue depth is in the thousands), then confirm with `sacct -j <JOB_ID> --format=JobID,State,ExitCode --noheader`; on Docker, wait for the background-process completion notification. Only once the job has actually finished, validate per the steps above.
 
 ## Output

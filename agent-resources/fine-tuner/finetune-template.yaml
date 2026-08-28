@@ -37,10 +37,17 @@ options:
     diffusion_every_n_steps: 1
     eval_metrics_every_n_epochs: 1
 
-    learning_rate: &lr 0.00025
-    learning_rate_body: &lr_body 0.000025
+    learning_rate: &lr 0.00005
+    learning_rate_body: &lr_body 0.000005
     weight_decay: &wd 0.01
     Components:
+      InvisibleInputProjector:
+        learning_rate: *lr
+        optimizer_group: "generation"
+        optimizer_type: "AdamW"
+        warm_up: true
+        weight_decay: *wd
+        decoupled_weight_decay: true
       GlobalEmbedding:
         learning_rate: *lr_body
         weight_decay: *wd
