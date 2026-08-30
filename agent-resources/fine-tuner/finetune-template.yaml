@@ -94,33 +94,6 @@ options:
       mode: "min"
       verbose: true
 
-    ProgressiveTraining:
-      stages:
-        - name: "full_training"
-          epoch_ratio: 1.0
-          transition_ratio: 1.0
-          # Template default: all zero, matching Components above. Set the key(s)
-          # matching your enabled head(s) to [1.0, 1.0] — generation-truth for
-          # TruthGeneration, generation-recon for ReconGeneration, classification
-          # (+classification-noised) for Classification, regression for Regression,
-          # assignment for Assignment, segmentation for Segmentation. GlobalGeneration
-          # has no dedicated key here — check options/options.yaml if enabling it.
-          loss_weights:
-            generation-truth: [ 0.0, 0.0 ]
-            generation-recon: [ 0.0, 0.0 ]
-            classification: [ 0.0, 0.0 ]
-            classification-noised: [  0.0, 0.0 ]
-            regression: [ 0.0, 0.0 ]
-            assignment: [ 0.0, 0.0 ]
-            segmentation: [ 0.0, 0.0 ]
-          train_parameters:
-            noise_prob: [ 1.0, 1.0 ]
-            reco_attn_mask: [ 0.45, 0.45 ]
-            ema_decay: [ 0.999, 0.999 ]
-
-    FAMO:
-      turn_on: false
-
     # This EMA block is tuned for TruthGeneration (the diffusion generative head
     # benefits from EMA-smoothed weights). If TruthGeneration is NOT among the
     # enabled heads, review whether these settings still make sense rather than
