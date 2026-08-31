@@ -75,10 +75,7 @@ options:
       TruthGeneration:
         # Template default: every head above is `include: false`. Set `true` for
         # whichever head(s) the approved plan selected, `false` for the rest —
-        # no head is a hardcoded default. When enabling a head, also set its
-        # matching key under ProgressiveTraining.stages[].loss_weights below to
-        # a nonzero value (this block's default is 1.0, tuned for TruthGeneration
-        # as the sole active head — revisit if multiple heads are active at once).
+        # no head is a hardcoded default.
         include: false
         warm_up: true
         learning_rate: *lr

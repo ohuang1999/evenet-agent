@@ -1,12 +1,12 @@
 #!/bin/bash
 # EveNet — export predictions back into the original data format (NERSC / Shifter)
-# No GPU needed; run from the login node.
+# No GPU needed; run from the login node. Reads only the prediction .pt — no original
+# input file access, since every needed field already rode through via extra_save.
 #
 # Placeholders to replace:
 #   <evenet_full>       absolute path to EveNet-Full repo
 #   <container_image>   Shifter image, e.g. docker:avencast1994/evenet:1.5
 #   <run_dir>           absolute path to EveNet-Full/run/<project_name> (this analysis's own subdirectory)
-#   <input_data_dir>    directory containing original input .root or .pt files
 #   <run_name>          run name used in prediction filename
 #   <output_path>        output file path (standard mode) — extension (.root or .pt) must
 #                        match the plan's input format; for 2-fold, <output_path_fold0> /
@@ -19,7 +19,6 @@
 EVENET_FULL=<evenet_full>
 CONTAINER_IMAGE=<container_image>
 RUN_DIR=<run_dir>
-INPUT_DIR=<input_data_dir>
 RUN_NAME=<run_name>
 OUTPUT_PATH=<output_path>
 TREE_NAME=<tree_name>
@@ -31,7 +30,6 @@ shifter --image=${CONTAINER_IMAGE} bash -c \
    export PYTHONPATH=${EVENET_FULL}:\$PYTHONPATH && \
    python3 merge_predictions.py \
      --pt_file predict/test_${RUN_NAME}.pt \
-     --input_dir ${INPUT_DIR} \
      --output ${OUTPUT_PATH} \
      --tree_name ${TREE_NAME} \
      --branch_prefix ${BRANCH_PREFIX}"
@@ -43,7 +41,6 @@ shifter --image=${CONTAINER_IMAGE} bash -c \
 #    export PYTHONPATH=${EVENET_FULL}:\$PYTHONPATH && \
 #    python3 merge_predictions.py \
 #      --pt_file predict_0/test_${RUN_NAME}.pt \
-#      --input_dir ${INPUT_DIR} \
 #      --output <output_path_fold0> \
 #      --tree_name ${TREE_NAME} \
 #      --branch_prefix ${BRANCH_PREFIX}"
@@ -54,7 +51,6 @@ shifter --image=${CONTAINER_IMAGE} bash -c \
 #    export PYTHONPATH=${EVENET_FULL}:\$PYTHONPATH && \
 #    python3 merge_predictions.py \
 #      --pt_file predict_1/test_${RUN_NAME}.pt \
-#      --input_dir ${INPUT_DIR} \
 #      --output <output_path_fold1> \
 #      --tree_name ${TREE_NAME} \
 #      --branch_prefix ${BRANCH_PREFIX}"

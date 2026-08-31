@@ -66,15 +66,15 @@ Once approved, invoke the remaining five subagents **sequentially, in the foregr
 1. `data-converter` — pass it the approved plan. Get back: parquet paths, `normalization.pt` path.
 2. `fine-tuner` — pass it the plan + data-converter's output. Get back: checkpoint path(s), prediction `.pt` path(s), W&B run URL. (This step includes prediction — see `fine-tuner`'s own notes on why train+predict run as one combined job rather than two.)
 3. `predictor` — pass it the plan + fine-tuner's output. Get back: validated prediction `.pt` path(s).
-4. `data-reconverter` — pass it the plan + predictor's output. Get back: final output file path (ROOT or `.pt`, matching the plan's input format), match rate.
+4. `data-reconverter` — pass it the plan + predictor's output. Get back: final output file path (ROOT or `.pt`, matching the plan's input format), event count (cross-checked against the prediction `.pt`'s own count — there's no match rate to report, since `data-reconverter` reads everything from the prediction `.pt` directly rather than re-matching against the original input).
 5. `result-synthesizer` — pass it the plan + data-reconverter's output. Get back: the computed observable and its methodology.
 
 Pass each subagent's full output forward, not just a path — later subagents may need context from earlier steps (e.g. `result-synthesizer` needs the plan's observable definition, not just the output file path).
 
 ## Step 6: Final report
 
-Summarize for the user: what was planned, what was approved, what each stage produced (event counts, job IDs/status, match rate), and the final observable with `result-synthesizer`'s stated methodology and its explicit note that the result needs physics review.
+Summarize for the user: what was planned, what was approved, what each stage produced (event counts, job IDs/status), and the final observable with `result-synthesizer`'s stated methodology and its explicit note that the result needs physics review.
 
 ## If something fails mid-pipeline
 
-Don't silently retry with different assumptions. Report which stage failed and why (each subagent's own instructions cover diagnosing failures in its domain — e.g. `fine-tuner` reads Slurm error logs, `data-reconverter` investigates a low match rate). If fixing it requires a plan change (not just a bug fix), that's a new plan — go back to Step 3 with the revision and get approval again before resuming.
+Don't silently retry with different assumptions. Report which stage failed and why (each subagent's own instructions cover diagnosing failures in its domain — e.g. `fine-tuner` reads Slurm error logs, `data-reconverter` investigates a missing `extra_save` field or an event-count mismatch against the prediction `.pt`). If fixing it requires a plan change (not just a bug fix), that's a new plan — go back to Step 3 with the revision and get approval again before resuming.

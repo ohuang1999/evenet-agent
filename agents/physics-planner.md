@@ -103,7 +103,11 @@ You turn a physics analysis request into a concrete, reviewable plan for the Eve
 
 16. **Propose output naming**: a predicted-branch/field prefix (e.g. `pred_<short target name>` for TruthGeneration output — pick something that reads sensibly for whichever head(s) are active) and an output file path. **`data-reconverter` writes output in the same format as the input, with one exception**: ROOT in → ROOT out, `.pt` in → `.pt` out, but **h5 in → `.pt` out** (never reconverted back to h5) — so the extension must match: `<run_dir>/output/predicted.root` for ROOT input, `<run_dir>/output/predicted.pt` for `.pt` **or** h5 input. `<run_dir>` (`<evenet_full>/run/<project_name>/`) is already project-scoped, so no need to repeat the project name in the filename too. State both as defaults in the plan.
 
-    **If the input format is h5**, also state explicitly which fields (beyond the standard reconverted point cloud + per-head predictions) the analysis needs carried into that `.pt` output — e.g. underlying truth-level branches needed only for a downstream physics calculation, not part of the trained model's own inputs/targets — and where `data-reconverter` should source them from: re-reading the original h5 input directly (it already re-reads the input for event-matching, so pulling extra fields from that same read is usually simplest) versus carrying them through `extra_save` in the predict YAML. This is a plan-level decision; don't leave `data-reconverter` to improvise it.
+    **State explicitly, for every analysis regardless of input format, which fields beyond the standard reconstructed point cloud + per-head predictions the analysis needs carried into the output** — e.g. underlying truth-level branches needed only for a downstream physics calculation, not part of the trained model's own inputs/targets. **`extra_save` in the predict YAML is the only mechanism for this — `data-reconverter` never re-reads or re-matches against the original ROOT/`.pt`/h5 input.** Every field named here has to flow: `data-converter` writes it into the parquet as an ordinary pass-through column (untouched by the model, never normalized), `fine-tuner`/`predictor` name it in `extra_save` so `scripts/predict.py`'s direct `outputs[key] = batch[key]` passthrough carries it into the prediction `.pt`, and `data-reconverter` reads it straight out of that file — no external file access at that stage at all. So name the *complete* list here; anything left off means `data-reconverter` genuinely cannot get it later.
+
+    **For ROOT input specifically**: this list is a *curated subset* of branches actually needed for the analysis, not the full original branch list — don't default to "carry everything through" just because ROOT ntuples conventionally preserve their full schema. If the analysis genuinely needs most/all of a small ntuple's branches, say so explicitly rather than it being an unstated assumption; if it's a large ntuple, naming only what's actually used is the point of this step, not an oversight to fix later.
+
+    Full list with source field/branch names goes in the plan's Technical report ("Output detail"); the Short report's `**Output**` line states just the count (e.g. "12 extra_save fields") so the approval-relevant summary doesn't balloon with the full listing.
 
 ## Output format
 
@@ -123,7 +127,7 @@ Omit any section that doesn't apply to the head(s) you picked, per the rules abo
 **Selection cut**: <one line if a cut applies, e.g. "n_lep>=2, n_bjet>=2, train+val only" — omit entirely if none>
 **Split mode**: `standard` (80:10:10) <one line; note the `2fold` alternative here too if the observable needs full-sample coverage>
 **Training**: checkpoint `<...>`; wall time `<HH:MM:SS>`; GPUs `<N>` (single-node unless noted otherwise); batch size `<train>` train / `<predict>` predict
-**Output**: `<path>`
+**Output**: `<path>` (`extra_save`: `<n>` fields — see Technical report for the list)
 **Downstream observable**: `<name>` — <one line>
 
 **Open questions / things I couldn't verify**: <full detail, never summarized down — these need the user's actual input, so cutting them short here defeats the point>
@@ -148,7 +152,7 @@ Omit any section that doesn't apply to the head(s) you picked, per the rules abo
 
 **Training detail**: checkpoint choice reasoning if non-default; wall-time reasoning if non-default; heads to enable in the finetune YAML; GPU/worker allocation reasoning (one allocation for the whole combined job — predict reuses the same cluster finetune stood up, it doesn't get an independent GPU count) and batch-size reasoning (train and predict separately, including why predict's is larger)
 
-**Output detail**: branch/field prefix `<prefix>`; full output path reasoning if non-obvious
+**Output detail**: branch/field prefix `<prefix>`; full output path reasoning if non-obvious; **full `extra_save` field list** — one row per field: source field/branch name, plan-assigned output name, one-line reason it's needed (which downstream observable step consumes it). This is the list `data-converter` must write as pass-through parquet columns and `fine-tuner`/`predictor` must name in the predict YAML's `extra_save` — `data-reconverter` will not re-read the original input to get anything not listed here.
 
 **Downstream observable**: <full methodology — formula, paper citation where applicable, exactly which reconverted-output branches/fields feed into it>
 ```
