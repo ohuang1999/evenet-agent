@@ -14,7 +14,7 @@ Templates referenced below live in `.claude/agent-resources/data-converter/`.
 
 ## Step 1: Create directory structure
 
-**`<run_dir>` (used throughout this pipeline, by every subagent) is `<evenet_full>/run/<project_name>/` — never bare `<evenet_full>/run/`.** This matters: without a project-specific subdirectory, a second analysis run in the same environment would silently overwrite this one's converted data, checkpoints, and predictions. You're the first agent to run after plan approval, so you're the one who creates this whole tree — don't create only the pieces your own phase needs and assume later agents will create theirs; `sbatch` in particular will fail at submission if `<run_dir>/logs/` doesn't already exist when `fine-tuner` submits its job.
+**`<run_dir>` (used throughout this pipeline, by every subagent) is `<evenet_full>/run/<project_name>/` — never bare `<evenet_full>/run/`.** This matters: without a project-specific subdirectory, a second analysis run in the same environment would silently overwrite this one's converted data, checkpoints, and predictions. **It is also the only run directory that exists for you: never `ls` `<evenet_full>/run/` and never read from another `run/<other_project>/` — see `## Run isolation` in `.claude/CLAUDE.md`.** You're the first agent to run after plan approval, so you're the one who creates this whole tree — don't create only the pieces your own phase needs and assume later agents will create theirs; `sbatch` in particular will fail at submission if `<run_dir>/logs/` doesn't already exist when `fine-tuner` submits its job.
 
 ```bash
 mkdir -p <run_dir>/config       # all generated YAMLs live here, never in EveNet-Full/share/
