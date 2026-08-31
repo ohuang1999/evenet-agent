@@ -27,7 +27,7 @@ docker run --rm --gpus all \
   "cd /workspace/EveNet_Full && \
    export PYTHONPATH=/workspace/EveNet_Full:\$PYTHONPATH && \
    echo '=== Fine-tuning ===' && \
-   python scripts/train.py share/<project_name>.yaml --ray_dir ~/ray_results && \
+   python scripts/train.py <run_dir>/config/<project_name>.yaml --ray_dir ~/ray_results && \
    echo '=== Prediction ===' && \
-   python scripts/predict.py share/predict_<project_name>.yaml" \
+   python scripts/predict.py <run_dir>/config/predict_<project_name>.yaml" \
   > <run_dir>/logs/run.out 2>&1
