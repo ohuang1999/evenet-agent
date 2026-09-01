@@ -117,7 +117,7 @@ if [ "$JOINED" != "$SLURM_JOB_NUM_NODES" ]; then
 fi
 
 echo "=== Fine-tuning ==="
-shifter python3 scripts/train.py share/<finetune_yaml> --load_all
+shifter python3 scripts/train.py <run_dir>/config/<finetune_yaml> --load_all
 TRAIN_EXIT=$?
 if [ $TRAIN_EXIT -ne 0 ]; then
   echo "=== Fine-tuning failed (exit $TRAIN_EXIT) -- skipping prediction ==="
@@ -125,4 +125,4 @@ if [ $TRAIN_EXIT -ne 0 ]; then
 fi
 
 echo "=== Prediction ==="
-shifter python3 scripts/predict.py share/<predict_yaml>
+shifter python3 scripts/predict.py <run_dir>/config/<predict_yaml>
