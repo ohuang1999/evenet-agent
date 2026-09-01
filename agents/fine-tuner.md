@@ -10,7 +10,7 @@ You execute Phase 2 (fine-tuning + prediction) of the EveNet pipeline, given `da
 
 **Design note**: fine-tuning and prediction run as **one combined submitted job** (train then predict, sequentially, in a single `sbatch`/`docker run`), not two separate jobs. This is deliberate — on a congested shared partition, a second full queue wait to run prediction is expensive, and prediction only takes seconds once the trained checkpoint exists. `predictor` (the next subagent) does not submit its own job in the default flow; it validates the prediction output this job already produced. Only fall back to a separate predict-only job if `predictor` is invoked standalone later (e.g. re-predicting with a different checkpoint without re-training).
 
-Templates referenced below live in `.claude/agent-resources/fine-tuner/`. **`<run_dir>` is `<evenet_full>/run/<project_name>/`** — `data-converter` already created this whole tree (`data_processed/`, `ckpts/`, `predict/`, `logs/`, `output/`), don't recreate or assume a bare `<evenet_full>/run/` — that would put this analysis's artifacts somewhere a second analysis could overwrite.
+Templates referenced below live in `.claude/agent-resources/fine-tuner/`. **`<run_dir>` is `<evenet_full>/run/<project_name>/`** — `data-converter` already created this whole tree (`config/`, `data_processed/`, `ckpts/`, `predict/`, `logs/`, `output/`), don't recreate or assume a bare `<evenet_full>/run/` — that would put this analysis's artifacts somewhere a second analysis could overwrite.
 
 ## Step 1: Checkpoint choice
 
@@ -18,7 +18,7 @@ Use whatever the approved plan states (`checkpoints.20M.a4.last.ckpt`, i.e. EveN
 
 ## Step 2: Generate the finetune YAML
 
-Copy `finetune-template.yaml`, filling in: `data_parquet_dir`/`data_parquet_val_dir` (from data-converter's output; omit val for 2-fold), `project_name`, `run_name`, `log_save_dir`, `pretrain_ckpt_path` (Step 1's choice), `model_checkpoint_save_path`, `normalization_file`. For 2-fold, generate two YAMLs (`_fold0`/`_fold1`, `ckpts_0`/`ckpts_1`, no val).
+Copy `finetune-template.yaml` to `<run_dir>/config/<project_name>.yaml` (**never into `EveNet-Full/share/` — that is upstream-tracked and shared across analyses**), filling in: `data_parquet_dir`/`data_parquet_val_dir` (from data-converter's output; omit val for 2-fold), `project_name`, `run_name`, `log_save_dir`, `pretrain_ckpt_path` (Step 1's choice), `model_checkpoint_save_path`, `normalization_file`. For 2-fold, generate two YAMLs (`_fold0`/`_fold1`, `ckpts_0`/`ckpts_1`, no val).
 
 **Enable the plan's head(s), and only those.** The template ships with every head under `Components:` set to `include: false` — this is deliberate, there's no default head. For each head in the plan's "Head(s)" list, set that head's `include: true`; leave every other head `false`. Then, in the same `Training.ProgressiveTraining.stages[].loss_weights` block, set the matching key(s) to `[1.0, 1.0]` for each enabled head and leave the rest at `[0.0, 0.0]`:
 
@@ -46,7 +46,7 @@ This is already the template's default (the diffusion generative head benefits f
 
 ## Step 3: Generate the predict YAML
 
-Copy `predict-template.yaml`, filling in: `data_parquet_test_dir`, `prediction_output_dir`, `prediction_filename`, `finetuned_ckpt_path` (`<run_dir>/ckpts/last.ckpt`), `normalization_file`, `project_name`. For 2-fold, generate two (fold0 predicts on test using `ckpts_0`, fold1 predicts on train using `ckpts_1` — this gives every event a prediction from a model that didn't train on it).
+Copy `predict-template.yaml` to `<run_dir>/config/predict_<project_name>.yaml` (same rule — never into `share/`), filling in: `data_parquet_test_dir`, `prediction_output_dir`, `prediction_filename`, `finetuned_ckpt_path` (`<run_dir>/ckpts/last.ckpt`), `normalization_file`, `project_name`. For 2-fold, generate two (fold0 predicts on test using `ckpts_0`, fold1 predicts on train using `ckpts_1` — this gives every event a prediction from a model that didn't train on it).
 
 Same rule as Step 2: this template also ships with every head `include: false` under `Components:`. Set `include: true` for exactly the same head(s) you enabled in the finetune YAML — the checkpoint only has trained weights for the heads it was actually fine-tuned on, so a mismatch here (predicting with a head that wasn't trained) would silently run an untrained head rather than error.
 
