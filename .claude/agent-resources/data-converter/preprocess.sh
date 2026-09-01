@@ -16,7 +16,7 @@ export PYTHONPATH="$PROJECT_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 
 # Standard mode (with val):
 python3 ../../preprocessing/preprocess.py \
-  --config ../../share/<project_name>.yaml \
+  --config config/<project_name>.yaml \
   --train data_processed/npz/train.npz \
   --test data_processed/npz/test.npz \
   --store_dir data_processed/parquet \
@@ -24,7 +24,7 @@ python3 ../../preprocessing/preprocess.py \
 
 # 2-fold mode (no val): uncomment below and comment out above
 # python3 ../../preprocessing/preprocess.py \
-#   --config ../../share/<project_name>.yaml \
+#   --config config/<project_name>.yaml \
 #   --train data_processed/npz/train.npz \
 #   --test data_processed/npz/test.npz \
 #   --store_dir data_processed/parquet

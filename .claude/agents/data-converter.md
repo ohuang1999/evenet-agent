@@ -14,9 +14,10 @@ Templates referenced below live in `.claude/agent-resources/data-converter/`.
 
 ## Step 1: Create directory structure
 
-**`<run_dir>` (used throughout this pipeline, by every subagent) is `<evenet_full>/run/<project_name>/` — never bare `<evenet_full>/run/`.** This matters: without a project-specific subdirectory, a second analysis run in the same environment would silently overwrite this one's converted data, checkpoints, and predictions. You're the first agent to run after plan approval, so you're the one who creates this whole tree — don't create only the pieces your own phase needs and assume later agents will create theirs; `sbatch` in particular will fail at submission if `<run_dir>/logs/` doesn't already exist when `fine-tuner` submits its job.
+**`<run_dir>` (used throughout this pipeline, by every subagent) is `<evenet_full>/run/<project_name>/` — never bare `<evenet_full>/run/`.** This matters: without a project-specific subdirectory, a second analysis run in the same environment would silently overwrite this one's converted data, checkpoints, and predictions. **It is also the only run directory that exists for you: never `ls` `<evenet_full>/run/` and never read from another `run/<other_project>/` — see `## Run isolation` in `.claude/CLAUDE.md`.** You're the first agent to run after plan approval, so you're the one who creates this whole tree — don't create only the pieces your own phase needs and assume later agents will create theirs; `sbatch` in particular will fail at submission if `<run_dir>/logs/` doesn't already exist when `fine-tuner` submits its job.
 
 ```bash
+mkdir -p <run_dir>/config       # all generated YAMLs live here, never in EveNet-Full/share/
 mkdir -p <run_dir>/data_processed/npz
 mkdir -p <run_dir>/data_processed/parquet
 mkdir -p <run_dir>/ckpts        # (or ckpts_0, ckpts_1 for 2-fold)
@@ -27,7 +28,9 @@ mkdir -p <run_dir>/output
 
 ## Step 2: Generate the event_info YAML
 
-Copy `.claude/agent-resources/data-converter/event_info_template.yaml` to `EveNet-Full/share/event_info/<project_name>_process.yaml`, filling in per the plan:
+Copy `.claude/agent-resources/data-converter/event_info_template.yaml` to `<run_dir>/config/<project_name>_process.yaml`. **Never write generated YAMLs into `EveNet-Full/share/` — that directory is upstream-tracked and shared across analyses; everything this run generates belongs under `<run_dir>/config/`.**
+
+Fill in per the plan:, filling in per the plan:
 
 - `INPUTS.GLOBAL.Conditions`: **leave this section exactly as the template has it** (the fixed 10-feature list matching the pretraining corpus's own schema — `met`, `met_phi`, `nLepton`, `nbJet`, `nJet`, `HT`, `HT_lep`, `M_all`, `M_leps`, `M_bjets`) **even if the plan has no real global conditions.** Don't leave it `{}` — an empty `Conditions:` produces a zero-length feature list, and `evenet/control/event_info.py` builds `torch.tensor([])` from it, which PyTorch defaults to `float32` instead of `bool` — this crashes `torch.where` in `Normalizer.__init__` (`evenet/network/body/normalizer.py`) at model-construction time. Confirmed by hitting exactly this in production: training completed, but prediction crashed with `RuntimeError: where expected condition to be a boolean tensor, but got a tensor with dtype Float`, traced to an empty `Conditions: {}`. Beyond just avoiding the crash, matching this exact schema is also what lets the pretrained checkpoint's `GlobalEmbedding` weights actually load (`safe_load_state` matches by shape; a different feature count means those weights get silently skipped instead of reused). If the plan's data has values for any of these 10 (or a genuinely custom condition not on this list), see Step 3 item 6 for how to populate them — the YAML declaration itself doesn't change either way.
 - `GENERATIONS.Neutrinos`: the plan's invisible-particle features/normalization **only if `TruthGeneration` is selected**; otherwise leave `{}`
