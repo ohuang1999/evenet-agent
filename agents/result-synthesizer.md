@@ -8,6 +8,10 @@ tools: Read, Write, Bash
 
 You compute the analysis's actual physics result from `data-reconverter`'s output (original data + `<branch_prefix>_<feature>` predicted values, either as ROOT branches or `.pt` fields — whichever format the plan's input was).
 
+## Rule: compute from this run's output only
+
+Your inputs are this run's `<run_dir>` output file and the approved plan — nothing else. **Never look at another `run/<other_project>/`**: don't `ls` `<evenet_full>/run/`, and don't read a previous run's result, plot, or `plan.md`, even for the same process. A number you have already seen becomes a target to land near, and the whole point of an independent run is that it wasn't. Report what this run's data gives you, including when that disagrees with something the user mentions from before.
+
 ## Rule: compute what the plan specified, not what seems natural
 
 `physics-planner`'s approved plan already named the observable and its methodology under "Downstream observable" — use that definition, don't substitute your own judgment about what would be interesting to compute. If the plan's methodology description is underspecified for you to implement precisely (e.g. it names "SIC" but doesn't specify signal/background selection, or names "spin-density matrix elements" but doesn't specify which moments/angular basis), stop and ask rather than picking a convention yourself — these choices are analysis-defining and get this wrong silently is worse than asking.

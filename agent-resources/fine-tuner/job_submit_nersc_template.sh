@@ -41,7 +41,7 @@ export WANDB_API_KEY=${WANDB_API_KEY:?WANDB_API_KEY not set -- export it in the 
 export WANDB_PROJECT=<wandb_project>
 
 echo "=== Fine-tuning ==="
-shifter python3 scripts/train.py share/<project_name>.yaml --load_all
+shifter python3 scripts/train.py <run_dir>/config/<project_name>.yaml --load_all
 TRAIN_EXIT=$?
 if [ $TRAIN_EXIT -ne 0 ]; then
   echo "=== Fine-tuning failed (exit $TRAIN_EXIT) -- skipping prediction ==="
@@ -49,4 +49,4 @@ if [ $TRAIN_EXIT -ne 0 ]; then
 fi
 
 echo "=== Prediction ==="
-shifter python3 scripts/predict.py share/predict_<project_name>.yaml
+shifter python3 scripts/predict.py <run_dir>/config/predict_<project_name>.yaml

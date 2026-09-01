@@ -20,7 +20,10 @@ platform:
   use_gpu: true
 
 options:
-  default: options/options.yaml
+  # NOTE: `default:` paths are resolved relative to THIS file's own directory
+  # (evenet/control/global_config.py: `path.parent / content["default"]`), so this
+  # YAML lives in <run_dir>/config/ and points back at share/ with absolute paths.
+  default: <evenet_full>/share/options/options.yaml
 
   # For prediction Only
   prediction:
@@ -100,7 +103,7 @@ network:
     feature_drop: 0.0
 
 event_info:
-  default: event_info/<project_name>_process.yaml
+  default: <run_dir>/config/<project_name>_process.yaml
 
 resonance:
-  default: resonance/standard_model.yaml
+  default: <evenet_full>/share/resonance/standard_model.yaml
