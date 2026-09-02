@@ -12,8 +12,9 @@ In the standard pipeline, `fine-tuner` already ran `scripts/predict.py` as the s
 
 1. Confirm the `.pt` file `fine-tuner` reported exists and is non-empty.
 2. Load it (`torch.load(path, map_location='cpu', weights_only=False)`) and check the structure is what `data-reconverter` will expect: a list of batch dicts, each containing `neutrinos.predict.<feature>` keys matching the plan's target features, and `full_input_point_cloud` with shape `(batch_size, 18, 7)`.
-3. Sanity-check value ranges aren't obviously broken (e.g. not all-zero, not all-NaN, roughly consistent magnitude with what log1p-space energy/pT values should look like).
-4. For 2-fold: confirm both fold `.pt` files exist and validate both.
+3. **If `Assignment` is among the plan's selected heads, also confirm `assignment_target` and `assignment_target_mask` are present in every batch.** `scripts/engine.py`'s `predict_step` writes these automatically and unconditionally whenever the Assignment head is active (`convert_target_assignment(...)`, not gated by `extra_save` at all) — this is the ground-truth pairing, exactly analogous to how `neutrinos.target` is the ground truth for `TruthGeneration`. It's easy to miss precisely because it isn't named in the plan's `extra_save` list the way pass-through fields are — check for it directly by key, don't assume it's absent just because nothing asked for it. If it's genuinely missing (verify against `scripts/engine.py`'s actual current logic before concluding this, since this project's own EveNet-Full checkout can be updated independently of these instructions), report that explicitly — downstream (`result-synthesizer`) needs this for pairing-efficiency validation and must not fall back to reconstructing ground truth via ΔR-matching or any other heuristic when the framework already computed and shipped it.
+4. Sanity-check value ranges aren't obviously broken (e.g. not all-zero, not all-NaN, roughly consistent magnitude with what log1p-space energy/pT values should look like).
+5. For 2-fold: confirm both fold `.pt` files exist and validate both.
 
 If validation fails, don't silently pass it downstream — diagnose (check the job's stdout/stderr log) and either fix-and-rerun the predict step yourself (see below) or report the failure clearly.
 
@@ -38,4 +39,5 @@ Count events in the predict-target parquet where the sum of all point-cloud mask
 Report back to the orchestrator (for hand-off to `data-reconverter`):
 - Validated `.pt` file path(s)
 - Confirmation of structure (feature keys found, point-cloud shape)
+- If `Assignment` is active: explicit confirmation `assignment_target`/`assignment_target_mask` are present (or a flagged gap if not)
 - Any issue found and how it was resolved
