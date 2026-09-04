@@ -10,7 +10,7 @@ You execute Phase 2 (fine-tuning + prediction) of the EveNet pipeline, given `da
 
 **Design note**: fine-tuning and prediction run as **one combined submitted job** (train then predict, sequentially, in a single `sbatch`/`docker run`), not two separate jobs. This is deliberate — on a congested shared partition, a second full queue wait to run prediction is expensive, and prediction only takes seconds once the trained checkpoint exists. `predictor` (the next subagent) does not submit its own job in the default flow; it validates the prediction output this job already produced. Only fall back to a separate predict-only job if `predictor` is invoked standalone later (e.g. re-predicting with a different checkpoint without re-training).
 
-Templates referenced below live in `.claude/agent-resources/fine-tuner/`. **`<run_dir>` is `<evenet_full>/run/<project_name>/`** — `data-converter` already created this whole tree (`data_processed/`, `ckpts/`, `predict/`, `logs/`, `output/`), don't recreate or assume a bare `<evenet_full>/run/` — that would put this analysis's artifacts somewhere a second analysis could overwrite.
+Templates referenced below live in `.claude/agent-resources/fine-tuner/`. **`<run_dir>` is `<evenet_full>/run/<project_name>/`** — `data-converter` already created this whole tree (`config/`, `data_processed/`, `ckpts/`, `predict/`, `logs/`, `output/`), don't recreate or assume a bare `<evenet_full>/run/` — that would put this analysis's artifacts somewhere a second analysis could overwrite.
 
 ## Step 1: Checkpoint choice
 
@@ -18,19 +18,9 @@ Use whatever the approved plan states (`checkpoints.20M.a4.last.ckpt`, i.e. EveN
 
 ## Step 2: Generate the finetune YAML
 
-Copy `finetune-template.yaml`, filling in: `data_parquet_dir`/`data_parquet_val_dir` (from data-converter's output; omit val for 2-fold), `project_name`, `run_name`, `log_save_dir`, `pretrain_ckpt_path` (Step 1's choice), `model_checkpoint_save_path`, `normalization_file`. For 2-fold, generate two YAMLs (`_fold0`/`_fold1`, `ckpts_0`/`ckpts_1`, no val).
+Copy `finetune-template.yaml` to `<run_dir>/config/<project_name>.yaml` (**never into `EveNet-Full/share/` — that is upstream-tracked and shared across analyses**), filling in: `data_parquet_dir`/`data_parquet_val_dir` (from data-converter's output; omit val for 2-fold), `project_name`, `run_name`, `log_save_dir`, `pretrain_ckpt_path` (Step 1's choice), `model_checkpoint_save_path`, `normalization_file`. For 2-fold, generate two YAMLs (`_fold0`/`_fold1`, `ckpts_0`/`ckpts_1`, no val).
 
-**Enable the plan's head(s), and only those.** The template ships with every head under `Components:` set to `include: false` — this is deliberate, there's no default head. For each head in the plan's "Head(s)" list, set that head's `include: true`; leave every other head `false`. Then, in the same `Training.ProgressiveTraining.stages[].loss_weights` block, set the matching key(s) to `[1.0, 1.0]` for each enabled head and leave the rest at `[0.0, 0.0]`:
-
-| Head | `Components` key | `loss_weights` key |
-|---|---|---|
-| TruthGeneration | `TruthGeneration` | `generation-truth` |
-| Assignment | `Assignment` | `assignment` |
-| ReconGeneration | `ReconGeneration` | `generation-recon` |
-| Classification | `Classification` | `classification` (and `classification-noised`) |
-| GlobalGeneration | `GlobalGeneration` | none in this template — check `options/options.yaml` if you enable it, don't assume a zero weight is correct |
-
-If the plan selected more than one head, both `include: true` and both loss-weight keys get set — don't leave a selected head with a zero loss weight, since that would enable it structurally but never actually train it, silently producing a checkpoint that looks right but wasn't optimized for that head.
+**Enable the plan's head(s), and only those.** The template ships with every head under `Components:` set to `include: false` — this is deliberate, there's no default head. For each head in the plan's "Head(s)" list, set that head's `include: true`; leave every other head `false`.
 
 **If `TruthGeneration` is among the enabled heads**, also set the `Training.EMA` block to:
 ```yaml
@@ -48,11 +38,13 @@ This is already the template's default (the diffusion generative head benefits f
 
 ## Step 3: Generate the predict YAML
 
-Copy `predict-template.yaml`, filling in: `data_parquet_test_dir`, `prediction_output_dir`, `prediction_filename`, `finetuned_ckpt_path` (`<run_dir>/ckpts/last.ckpt`), `normalization_file`, `project_name`. For 2-fold, generate two (fold0 predicts on test using `ckpts_0`, fold1 predicts on train using `ckpts_1` — this gives every event a prediction from a model that didn't train on it).
+Copy `predict-template.yaml` to `<run_dir>/config/predict_<project_name>.yaml` (same rule — never into `share/`), filling in: `data_parquet_test_dir`, `prediction_output_dir`, `prediction_filename`, `finetuned_ckpt_path` (`<run_dir>/ckpts/last.ckpt`), `normalization_file`, `project_name`. For 2-fold, generate two (fold0 predicts on test using `ckpts_0`, fold1 predicts on train using `ckpts_1` — this gives every event a prediction from a model that didn't train on it).
 
 Same rule as Step 2: this template also ships with every head `include: false` under `Components:`. Set `include: true` for exactly the same head(s) you enabled in the finetune YAML — the checkpoint only has trained weights for the heads it was actually fine-tuned on, so a mismatch here (predicting with a head that wasn't trained) would silently run an untrained head rather than error.
 
-**Check the plan for `extra_save` needs before leaving the template's empty `[]` as-is.** Each head's own predict/target output isn't always the complete picture — most notably, `TruthGeneration`'s validity mask isn't carried into the raw prediction `.pt` at all (unlike `Assignment`'s `assignment_target_mask`, which is automatic). If `physics-planner`'s plan names extra field(s) needed downstream (per its own target-validity check), add them to `extra_save` by their exact batch-key name — the same prefix the source parquet's columns use, without the trailing `:N` index (verify against the actual schema rather than guessing the name). `engine.py`'s handling is a direct `outputs[key] = batch[key]` passthrough for each listed key, so whatever you name must exist verbatim in the batch. If the plan doesn't call for anything extra, leave it empty — this is a check to make, not a default to skip.
+**`extra_save` must carry the plan's complete field list — this is not an occasional fixup, it's a required, load-bearing step.** `data-reconverter` never re-reads or re-matches against the original input file (see its own instructions) — every field it needs beyond the point cloud and per-head predictions has to arrive through `extra_save`, or it's simply unavailable downstream. Read the plan's Output section "extra_save field list" (Technical report's "Output detail") in full and add every field named there, by its exact batch-key name — the same prefix the source parquet's pass-through column uses (`data-converter` wrote it there per the plan), without the trailing `:N` index (verify against the actual schema rather than guessing the name). `engine.py`'s handling is a direct `outputs[key] = batch[key]` passthrough for each listed key, so whatever you name must exist verbatim in the batch.
+
+This also covers the older, narrower case that motivated this field in the first place: `TruthGeneration`'s validity mask isn't carried into the raw prediction `.pt` automatically (unlike `Assignment`'s `assignment_target_mask`, which is) — if the plan's target-validity check named a field for this, it's part of the same complete list, not a separate check. If the plan's Output section names nothing extra, leave `extra_save` empty — but that should be because the plan genuinely has nothing to add, not because this step was skipped.
 
 **`platform.number_of_workers` / `resources_per_worker` (CPU/GPU) must match the finetune YAML's.** Prediction runs against the *same already-running Ray cluster* the finetune job stood up (Step 4) — that cluster registers however many total GPUs `number_of_workers × resources_per_worker["GPU"]` came out to in Step 2. If predict's own config declares fewer workers than that, prediction doesn't fail, it just silently runs on a fraction of the allocated GPUs while the rest sit idle for the whole prediction phase — easy to miss since nothing errors.
 

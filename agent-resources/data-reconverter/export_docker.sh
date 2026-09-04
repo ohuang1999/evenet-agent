@@ -1,10 +1,10 @@
 #!/bin/bash
 # EveNet — export predictions back into the original data format (Docker)
-# No GPU needed.
+# No GPU needed. Reads only the prediction .pt — no original input file access,
+# since every needed field already rode through via extra_save.
 #
 # Placeholders to replace:
 #   <evenet_full>       absolute path to EveNet-Full repo on host
-#   <input_data_dir>    directory containing original input .root or .pt files on host
 #   <project_name>      project name — artifacts live under run/<project_name>/
 #   <run_name>          run name used in prediction filename
 #   <output_path>        output file path (standard) — extension (.root or .pt) must match
@@ -16,7 +16,6 @@
 
 EVENET_FULL=<evenet_full>
 CONTAINER_IMAGE=docker.io/avencast1994/evenet:1.5
-INPUT_DIR=<input_data_dir>
 PROJECT_NAME=<project_name>
 RUN_NAME=<run_name>
 OUTPUT_PATH=<output_path>
@@ -26,14 +25,12 @@ BRANCH_PREFIX=<branch_prefix>
 # --- Standard mode ---
 docker run --rm \
   -v ${EVENET_FULL}:/workspace/EveNet_Full \
-  -v ${INPUT_DIR}:/input_data \
   -v $(dirname ${OUTPUT_PATH}):/output_dir \
   ${CONTAINER_IMAGE} bash -c \
   "cd /workspace/EveNet_Full/run/${PROJECT_NAME} && \
    export PYTHONPATH=/workspace/EveNet_Full:\$PYTHONPATH && \
    python3 merge_predictions.py \
      --pt_file predict/test_${RUN_NAME}.pt \
-     --input_dir /input_data \
      --output /output_dir/$(basename ${OUTPUT_PATH}) \
      --tree_name ${TREE_NAME} \
      --branch_prefix ${BRANCH_PREFIX}"
@@ -44,14 +41,12 @@ docker run --rm \
 # Fold 0
 # docker run --rm \
 #   -v ${EVENET_FULL}:/workspace/EveNet_Full \
-#   -v ${INPUT_DIR}:/input_data \
 #   -v $(dirname <output_path_fold0>):/output_dir \
 #   ${CONTAINER_IMAGE} bash -c \
 #   "cd /workspace/EveNet_Full/run/${PROJECT_NAME} && \
 #    export PYTHONPATH=/workspace/EveNet_Full:\$PYTHONPATH && \
 #    python3 merge_predictions.py \
 #      --pt_file predict_0/test_${RUN_NAME}.pt \
-#      --input_dir /input_data \
 #      --output /output_dir/$(basename <output_path_fold0>) \
 #      --tree_name ${TREE_NAME} \
 #      --branch_prefix ${BRANCH_PREFIX}"
@@ -59,14 +54,12 @@ docker run --rm \
 # Fold 1
 # docker run --rm \
 #   -v ${EVENET_FULL}:/workspace/EveNet_Full \
-#   -v ${INPUT_DIR}:/input_data \
 #   -v $(dirname <output_path_fold1>):/output_dir \
 #   ${CONTAINER_IMAGE} bash -c \
 #   "cd /workspace/EveNet_Full/run/${PROJECT_NAME} && \
 #    export PYTHONPATH=/workspace/EveNet_Full:\$PYTHONPATH && \
 #    python3 merge_predictions.py \
 #      --pt_file predict_1/test_${RUN_NAME}.pt \
-#      --input_dir /input_data \
 #      --output /output_dir/$(basename <output_path_fold1>) \
 #      --tree_name ${TREE_NAME} \
 #      --branch_prefix ${BRANCH_PREFIX}"
