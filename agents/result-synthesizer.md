@@ -46,3 +46,7 @@ Report to the orchestrator and the user:
 - The computed observable's value(s), with your exact methodology stated
 - Any assumption you had to make because the plan underspecified something
 - **An explicit note that this result has not been physics-reviewed** and should be checked by the user before being treated as final — you compute the number, you don't validate its physics correctness beyond basic sanity checks
+
+**Structured reporting**: write a success report (or, if Step 2's sanity checks fail and you can't resolve it yourself, a failure report) per `.claude/agent-resources/shared/workflow-state.md`'s schema and failure taxonomy, to `<run_dir>/result_synthesis/attempt_<N>_[failure_]report.yaml`.
+
+**If the orchestrator invokes you in repair/diagnostic mode** (this is the end of the pipeline, so there's no further downstream failure to point you at — you'd be re-entered after your own sanity checks failed and a fix was made elsewhere), read the referenced upstream artifacts and any prior attempt's report from disk per the shared doc's "Repair/diagnostic-mode entry contract" rather than assuming you remember a previous invocation, then recompute. If a sanity check fails and you believe the cause is upstream (e.g. NaNs traced to a specific reconverted field, an implausible value traced to a specific prediction), report that as a failure with `suspected_origin_stage` naming the likely stage and concrete evidence — don't silently work around bad input data to force a plausible-looking number.

@@ -41,3 +41,7 @@ Report back to the orchestrator (for hand-off to `data-reconverter`):
 - Confirmation of structure (feature keys found, point-cloud shape)
 - If `Assignment` is active: explicit confirmation `assignment_target`/`assignment_target_mask` are present (or a flagged gap if not)
 - Any issue found and how it was resolved
+
+**Structured reporting**: write a success report (or, if validation genuinely fails and you can't resolve it yourself, a failure report) per `.claude/agent-resources/shared/workflow-state.md`'s schema and failure taxonomy, to `<run_dir>/prediction/attempt_<N>_[failure_]report.yaml`.
+
+**If the orchestrator invokes you in repair/diagnostic mode** (pointing you at a downstream failure report, e.g. from `data-reconverter`, plus this stage's own prior artifacts), read those referenced files from disk per the shared doc's "Repair/diagnostic-mode entry contract" — never assume you remember a previous invocation. Diagnose within your own domain (the prediction `.pt`'s structure/validity) and either fix-and-revalidate (writing a new attempt report with `repair_context`) or write a diagnostic report stating your output already passed validation and the fault lies elsewhere. Don't reach into `fine-tuner`'s or `data-converter`'s own artifacts to fix them yourself — report a suspected upstream cause and let the orchestrator act on it.
