@@ -113,7 +113,11 @@ options:
     dataset_limit_apply_to_val_set: false
 
 network:
-  default: network/network-20M.yaml
+  # Must be absolute (see the `options.default` note above — same resolution
+  # rule applies here) -- a bare relative path resolves against <run_dir>/config/
+  # itself and crashes scripts/train.py with FileNotFoundError before a single
+  # batch runs. Found the hard way on a real run (job 57871118).
+  default: <evenet_full>/share/network/network-20M.yaml
 
   # remove feature drop
   Body:
