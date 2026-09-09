@@ -45,7 +45,29 @@ EMA:
 ```
 This is already the template's default (the diffusion generative head benefits from EMA-smoothed weights) — just don't overwrite it with something else. If `TruthGeneration` is **not** enabled, review whether this EMA configuration still makes sense for the head(s) that are, rather than keeping it unexamined.
 
+**When you enable a head, review that head's *other* settings too — several template values are only correct because the head is disabled.** Both templates ship every head `include: false`, and some per-head keys were set to match that dormant state rather than to express an analysis choice. Flipping `include: true` without revisiting its siblings silently inherits a value whose justification no longer holds.
+
+The known case, which is not hypothetical: `Classification.include_cross_term` is `false` in `finetune-template.yaml`, but only because `Classification.include` is also `false` there — with the head off, the cross-term is moot. EveNet's own default is `true` (`share/options/options.yaml`), so **when you enable `Classification`, set `include_cross_term: true`** unless the plan says otherwise. It is safe with the generation heads disabled: `scripts/engine.py` guards the cross-term loss on `outputs["classification-noised"]` being non-empty, so it is skipped rather than erroring.
+
+Treat this as the general rule, not a one-off fix: for every head you switch on, read its whole block in the template and ask whether each value is an analysis decision or an artifact of the head having been off. Where the answer isn't obvious from the plan, that's a question for the user (see the approval rule below), not a value to inherit by default.
+
 **GPU count and training batch size come from the plan directly** (`physics-planner`'s "Training" section states `number_of_workers` and training `batch_size`) — set `platform.number_of_workers`/`batch_size` to exactly what the plan says, not the template's leftover defaults. This is a plan-level decision now, not something you propose or re-derive here. `resources_per_worker["GPU"]` is 1 (the existing one-GPU-per-worker convention); `resources_per_worker["CPU"]` remains yours to set as before — a sensible fraction of Perlmutter's 128 CPUs/node for the GPU count in play (e.g. ~30 CPU/worker for a 4-GPU node) — the plan doesn't state this, it's an implementation detail, not something needing user approval. If `number_of_workers` works out to more than 4, that's a multi-node job — see Step 4.
+
+### Configuration changes need the user's approval — the plan is the only standing authorization
+
+**You may not change a template value on your own judgement.** Everything in the generated YAMLs must trace to one of exactly three sources:
+
+1. **A placeholder substitution** — a `<...>` field filled with a path, project name, or count.
+2. **A value the approved plan states** — epochs, wall time, batch size, learning rates, checkpoint, head enables, `extra_save`, and so on. The plan is the user's approval, already given.
+3. **A genuine implementation detail the plan explicitly leaves to you** — `resources_per_worker["CPU"]` is the named example above.
+
+**Anything else — including a template value you believe is wrong — stops and asks.** Report it to the orchestrator with the evidence (what the value is, what you think it should be, what it costs, and the code path that shows why), and let the user decide. The orchestrator is the only component that can actually reach the user; you cannot. Do not submit a job containing an unapproved deviation and mention it afterwards.
+
+This holds even when you are clearly right on the merits. A defensible change is still an unapproved one, and the plan stops being a reproducible record of the run the moment the run's configuration contains decisions the plan does not describe. Two real examples from past runs, both defensible and both wrong to have made silently: reverting `log_gradient_step` from the template's `1` to EveNet's upstream `100` (a real throughput win — and a config the plan never mentioned), and nudging `prefetch_batches` to match a larger predict batch size.
+
+**Once the user approves a change, it goes into `plan.md`**, not only into the YAML — the orchestrator does this. A config value that exists only in a generated file is not part of the approved plan and will not survive into the run's record.
+
+The corollary for propagation between the two YAMLs: where the finetune and predict templates disagree on a key (they do — `Classification.include_cross_term` is pinned in one and absent from the other, `TruthGeneration.diffusion_steps` differs), making them agree is *not* a free change either. Choose the value the plan implies, state it explicitly in both files rather than relying on one falling back to an upstream default, and if the plan doesn't imply one, ask.
 
 ## Step 3: Generate the predict YAML
 
