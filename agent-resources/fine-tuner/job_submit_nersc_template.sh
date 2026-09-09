@@ -41,7 +41,14 @@ export WANDB_API_KEY=${WANDB_API_KEY:?WANDB_API_KEY not set -- export it in the 
 export WANDB_PROJECT=<wandb_project>
 
 echo "=== Fine-tuning ==="
-shifter python3 scripts/train.py <run_dir>/config/<project_name>.yaml --load_all
+# <load_all_flag>: pass `--load_all` for `holdout`/`2fold` (no separate val
+# directory -- EveNet carves validation out of the train dataset by event index
+# via options.yaml's Dataset.val_split). Leave it EMPTY for `standard`, because
+# scripts/shared.py only honours data_parquet_val_dir in the
+# `not load_all_in_ram` branch -- with --load_all the separate val.parquet is
+# silently ignored and validation is taken as val_split of the train file
+# instead. See fine-tuner.md Step 4.
+shifter python3 scripts/train.py <run_dir>/config/<project_name>.yaml <load_all_flag>
 TRAIN_EXIT=$?
 if [ $TRAIN_EXIT -ne 0 ]; then
   echo "=== Fine-tuning failed (exit $TRAIN_EXIT) -- skipping prediction ==="

@@ -8,7 +8,7 @@
 #   <project_name>      project name — artifacts live under run/<project_name>/
 #   <run_name>          run name used in prediction filename
 #   <output_path>        output file path (standard) — extension (.root or .pt) must match
-#                        the plan's input format; for 2-fold, fill actual per-fold/merged
+#                        the plan's input format; for 2fold (two trained models), fill actual per-fold/merged
 #                        paths in directly below rather than deriving them via suffixing
 #   <tree_name>         TTree name, e.g. BPHY25 — ROOT input only; delete the
 #                        "--tree_name ${TREE_NAME}" line (and TREE_NAME= line) if input is .pt
@@ -35,7 +35,7 @@ docker run --rm \
      --tree_name ${TREE_NAME} \
      --branch_prefix ${BRANCH_PREFIX}"
 
-# --- 2-fold mode (uncomment and comment out standard mode above) ---
+# --- 2fold mode ONLY (two trained models to merge; holdout uses standard mode above) ---
 # Fill in <output_path_fold0> / <output_path_fold1> / <merged_output_path> with the
 # actual final paths (same extension as OUTPUT_PATH above) before uncommenting.
 # Fold 0

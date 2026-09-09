@@ -9,7 +9,7 @@
 #   <run_dir>           absolute path to EveNet-Full/run/<project_name> (this analysis's own subdirectory)
 #   <run_name>          run name used in prediction filename
 #   <output_path>        output file path (standard mode) — extension (.root or .pt) must
-#                        match the plan's input format; for 2-fold, <output_path_fold0> /
+#                        match the plan's input format; for 2fold (two trained models), <output_path_fold0> /
 #                        <output_path_fold1> / <merged_output_path> instead (fill in the
 #                        actual final paths yourself, don't derive them via string suffixing)
 #   <tree_name>         TTree name, e.g. BPHY25 — ROOT input only; delete the
@@ -34,7 +34,7 @@ shifter --image=${CONTAINER_IMAGE} bash -c \
      --tree_name ${TREE_NAME} \
      --branch_prefix ${BRANCH_PREFIX}"
 
-# --- 2-fold mode (uncomment and comment out standard mode above) ---
+# --- 2fold mode ONLY (two trained models to merge; holdout uses standard mode above) ---
 # Fold 0
 # shifter --image=${CONTAINER_IMAGE} bash -c \
 #   "cd ${RUN_DIR} && \

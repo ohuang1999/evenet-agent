@@ -30,6 +30,13 @@ options:
     filename: <prediction_filename>
     save_point_cloud: true
     extra_save:
+      # The plan's complete "extra_save field list" (Technical report ->
+      # "Output detail") goes here, each by its exact batch-key name. This is
+      # the ONLY way a field reaches predicted.pt. Every entry must be numeric
+      # or boolean -- a string/object dtype is unsafe regardless of naming
+      # (see fine-tuner.md Step 3). Never list `classification` here: it
+      # collides with the model's own predicted-output key and would overwrite
+      # the prediction with the truth label.
       []
 
   Training:

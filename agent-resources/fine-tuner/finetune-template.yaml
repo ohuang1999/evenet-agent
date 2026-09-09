@@ -33,6 +33,15 @@ options:
     total_epochs: 50
     epochs: 50
     log_gradient_step: 1
+
+    # Set to true ONLY if the approved plan's "Event weights" section specifies
+    # real per-event weights (data-converter then writes them into the
+    # event_weight column). Default false means the loss ignores that column
+    # entirely -- training runs silently unweighted, with no error or warning.
+    # See fine-tuner.md Step 2. Leave commented out if the plan says weights
+    # do not apply.
+    # apply_event_weight: true
+
     pretrain_model_load_path: "<pretrain_ckpt_path>"
     model_checkpoint_save_path: "<model_checkpoint_save_path>"
 

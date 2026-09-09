@@ -18,11 +18,20 @@ Use whatever the approved plan states (`checkpoints.20M.a4.last.ckpt`, i.e. EveN
 
 ## Step 2: Generate the finetune YAML
 
-Copy `finetune-template.yaml` to `<run_dir>/config/<project_name>.yaml` (**never into `EveNet-Full/share/` — that is upstream-tracked and shared across analyses**), filling in: `data_parquet_dir`/`data_parquet_val_dir` (from data-converter's output; omit val for 2-fold), `project_name`, `run_name`, `log_save_dir`, `pretrain_ckpt_path` (Step 1's choice), `model_checkpoint_save_path`, `normalization_file`. For 2-fold, generate two YAMLs (`_fold0`/`_fold1`, `ckpts_0`/`ckpts_1`, no val).
+Copy `finetune-template.yaml` to `<run_dir>/config/<project_name>.yaml` (**never into `EveNet-Full/share/` — that is upstream-tracked and shared across analyses**), filling in: `data_parquet_dir`/`data_parquet_val_dir` (from data-converter's output; omit val for `holdout`/`2fold`), `project_name`, `run_name`, `log_save_dir`, `pretrain_ckpt_path` (Step 1's choice), `model_checkpoint_save_path`, `normalization_file`.
+
+**How many YAMLs (and how many training runs) depends on the plan's split mode — read it before generating anything:**
+- **`standard`** → one YAML, **one** model trained (`ckpts`), train/val/test.
+- **`holdout`** → one YAML, **one** model trained (`ckpts`), on `train.parquet`, predicting `test.parquet`. No val dir (EveNet carves validation from train internally). **A 50:50 train/test split is this mode** — one model, not two.
+- **`2fold`** → two YAMLs (`_fold0`/`_fold1`, `ckpts_0`/`ckpts_1`, no val), **two** models trained, each predicting the half it didn't train on. This is the *only* mode that trains a second model, and it costs 2× the GPU-hours.
+
+**Never infer "two models" from a 50:50 ratio alone.** `2fold` is defined by training two models, not by the split being even — a plan asking for a 50:50 holdout with a single model is `holdout`, and generating a second fold for it wastes a full training allocation. This exact misreading caused a real run to submit an unwanted second job that had to be cancelled. If the plan's split mode and its prose disagree (e.g. it says `2fold` but also says "no second training run"), stop and report the contradiction rather than picking one — that's a plan defect for the orchestrator to resolve, not something to resolve by guessing.
 
 **Before moving on, independently verify every `default:` field resolves to an absolute path — don't just fill in the named placeholders above and trust the rest of the template is already correct.** There are four of them in this YAML: `options.default`, `network.default`, `event_info.default`, `resonance.default`. `evenet/control/global_config.py` resolves each one relative to *this file's own directory* (`<run_dir>/config/`, not `EveNet-Full/`), so any left as a relative string or an unsubstituted template literal crashes `scripts/train.py` at config-load time — before a single training batch runs, often after a long queue wait, which makes the failure expensive to discover late. This isn't a hypothetical: `network.default` shipped as a bare relative literal in this template (missing the `<evenet_full>` placeholder marker its three sibling `default:` fields all had) and crashed a real run this way (job 57871118) — the template itself is now fixed, but treat this as a standing check on every run, not a one-time template audit, since a future template edit could reintroduce the same class of bug and this step is what would catch it before submission rather than after a multi-day queue wait.
 
 **Enable the plan's head(s), and only those.** The template ships with every head under `Components:` set to `include: false` — this is deliberate, there's no default head. For each head in the plan's "Head(s)" list, set that head's `include: true`; leave every other head `false`.
+
+**If the plan's "Event weights" section specifies real per-event weights, set `Training.apply_event_weight: true`.** This gate (declared in `share/options/options.yaml`, default `false`, read in `scripts/engine.py`) is what makes the loss actually consume the `event_weight` column `data-converter` wrote — leaving it at the default means the weights sit in the data unused and training silently runs unweighted, with nothing failing or warning. Verify the key's location against `share/options/options.yaml`'s actual schema rather than assuming the path. If the plan says weights don't apply, leave it unset.
 
 **If `TruthGeneration` is among the enabled heads**, also set the `Training.EMA` block to:
 ```yaml
@@ -40,7 +49,7 @@ This is already the template's default (the diffusion generative head benefits f
 
 ## Step 3: Generate the predict YAML
 
-Copy `predict-template.yaml` to `<run_dir>/config/predict_<project_name>.yaml` (same rule — never into `share/`), filling in: `data_parquet_test_dir`, `prediction_output_dir`, `prediction_filename`, `finetuned_ckpt_path` (`<run_dir>/ckpts/last.ckpt`), `normalization_file`, `project_name`. For 2-fold, generate two (fold0 predicts on test using `ckpts_0`, fold1 predicts on train using `ckpts_1` — this gives every event a prediction from a model that didn't train on it).
+Copy `predict-template.yaml` (`.claude/agent-resources/fine-tuner/predict-template.yaml` — the single shared copy, also used by `predictor`) to `<run_dir>/config/predict_<project_name>.yaml` (same rule — never into `share/`), filling in: `data_parquet_test_dir`, `prediction_output_dir`, `prediction_filename`, `finetuned_ckpt_path` (`<run_dir>/ckpts/last.ckpt`), `normalization_file`, `project_name`. For `standard`/`holdout`, generate **one** predict YAML (predicting `test.parquet` with the single trained checkpoint). For `2fold` only, generate two (fold0 predicts on test using `ckpts_0`, fold1 predicts on train using `ckpts_1` — this gives every event a prediction from a model that didn't train on it).
 
 **Same `default:`-field verification as Step 2, applied independently to this file.** This predict YAML has its own separate copy of `options.default`/`network.default`/`event_info.default`/`resonance.default` — fixing or verifying the finetune YAML's copy in Step 2 says nothing about this one. Check all four here too before moving on.
 
@@ -64,13 +73,39 @@ Check: count events in the predict-target parquet where the sum of all point-clo
 
 **Pre-submission checklist, both YAMLs**: before generating the job script below, confirm both the Step 2 empty-point-cloud-adjacent check above *and* Step 2/3's `default:`-field verification (all four fields, both files — `options.default`/`network.default`/`event_info.default`/`resonance.default`) actually happened, not just that the steps were read. A relative or unsubstituted `default:` field fails fast (before training starts) but often only after a long queue wait, which is exactly the expensive-to-discover-late failure this checklist exists to catch beforehand instead.
 
+## Step 3.5: Smoke test — only if the approved plan's `Smoke test` line says `yes`
+
+**This is plan-driven, not your judgment call.** If the plan says `no` (or predates this field and says nothing), skip straight to Step 4 — don't run one anyway, and don't ask; you have no channel to the user. If it says `yes`, run this to completion *before* submitting the real job.
+
+Generate throwaway copies of the finetune and predict YAMLs (e.g. `<run_dir>/config/smoketest_<project_name>.yaml` and `smoketest_predict_<project_name>.yaml`) — **copies of the real ones you just generated, not fresh ones from the template**, so the test exercises the actual config that's about to be submitted. Change only:
+- `Dataset.dataset_limit` → a small fraction (start `0.005`; raise it if that yields fewer events than a couple of batches at the configured `batch_size`, since a limit that rounds down to an empty or single-batch dataset tests nothing)
+- `epochs`/`total_epochs` → `1`
+- checkpoint save path and prediction `output_dir`/`filename` → smoke-test-specific paths, so nothing collides with or overwrites the real run's artifacts
+- `platform.number_of_workers` → `1` and `resources_per_worker.GPU` → `1` (a debug allocation isn't the place to reserve the full cluster)
+
+Submit as a **separate short job**: same job template, but `--qos=debug`, `--time=00:20:00`, and one GPU. The debug queue typically schedules in minutes rather than the hours-to-days the real partition may take — that turnaround is the entire point. Keep `<load_all_flag>` set exactly as Step 4 specifies for this run's split mode, so the test exercises the same data-loading path as the real job.
+
+It must run `train.py` **and then** `predict.py`, and both must exit 0 — a smoke test that stops after training misses every prediction-side failure (`extra_save` key errors, head mismatches between the two YAMLs, prediction-path collation problems), which is most of what this is for.
+
+**On pass**: delete or ignore the smoke-test outputs (never let them be mistaken for real results — they're one epoch on a fraction of a percent of the data), note it passed in your report, and proceed to Step 4.
+
+**On failure**: do **not** submit the real job. Diagnose exactly as you would a full-job failure (Step 6's classification), and if it's an input/schema problem, write the failure report naming `data_conversion` as the suspected origin. Catching it here is the whole purpose — submitting the real job anyway after a failed smoke test wastes precisely the queue wait this step exists to protect.
+
+**What it does not cover**, and must not be reported as if it did: convergence/quality (one epoch on a tiny sample says nothing about either), and full-scale memory behavior (an OOM at full `batch_size` and full worker count won't reproduce at `number_of_workers: 1` on a fraction of the data). A passed smoke test means the plumbing works end to end, nothing more.
+
 ## Step 4: Generate and submit the combined job
 
 **NERSC**: compute `<total_gpus>` = `number_of_workers × resources_per_worker["GPU"]` from the finetune YAML first — this decides which template to use:
 - **`<total_gpus>` ≤ 4** (fits on one Perlmutter node): copy `job_submit_nersc_template.sh`, fill `<project_name>`, `<account>`, `<wall_time>` (from the approved plan), `<container_image>`, `<run_dir>`, `<evenet_full>`, `<wandb_project>`, `<total_gpus>`.
 - **`<total_gpus>` > 4** (needs multiple nodes): copy `job_submit_nersc_multinode_template.sh` instead — the single-node template silently under-schedules rather than erroring in this case (see that template's own header for why: `ray.init()` with no `address=` only ever sees the local node, so a naive multi-node Slurm allocation doesn't actually give Ray more than one node's GPUs to schedule against). Fill the other placeholders from the single-node list (`<project_name>`, `<account>`, `<wall_time>`, `<container_image>`, `<run_dir>`, `<evenet_full>`, `<wandb_project>`) plus this template's own: `<num_nodes>` (= `ceil(total_gpus / gpus_per_node)`, replacing `<total_gpus>` — not used directly here), `<gpus_per_node>`/`<cpus_per_node>` (4 and 128 on Perlmutter), `<finetune_yaml>`, `<predict_yaml>`.
 
-Neither template takes a literal API-key placeholder — both reference `${WANDB_API_KEY:?...}` and expect the value to already be in the submitting shell's environment. Export it and run `sbatch` in the *same* shell command (`export WANDB_API_KEY="<value>" && sbatch <script>`) so the literal value only ever exists transiently in that one process's environment, never written to any file. Both templates already run `train.py` then `predict.py` in sequence, with an exit-code guard skipping prediction if training fails. Submit with `sbatch`. For 2-fold, generate two scripts (`_fold0`/`_fold1`) and submit both.
+**Fill `<load_all_flag>` according to the split mode — this is a correctness setting, not a performance knob.**
+- **`standard`** → leave `<load_all_flag>` **empty** (do not pass `--load_all`). `scripts/shared.py` honours `data_parquet_val_dir` **only** in the `not load_all_in_ram` branch; with `--load_all` the separate `val.parquet` is never read at all and validation is silently taken as `Dataset.val_split` (default `[0.7, 1.0]`, i.e. the last 30%) of the *train* file instead — so an 80:10:10 plan would actually train on 70% of the 80% train split, with the 10% val file dead on disk. Before submitting, confirm `data_parquet_val_dir` points at a directory containing at least one `.parquet`: if it's set but empty the run hard-errors (`ValueError: No parquet files found in validation directory`), and if it's unset the code falls back to a *file-level* slice of the train files, which for a single `train.parquet` leaves the train set empty.
+- **`holdout` / `2fold`** → pass `--load_all`. There is no separate val directory in these modes by design; validation is carved from the train dataset by event index via `Dataset.val_split`, which is exactly the intended behavior. Keep `--load_all` here specifically: the non-`load_all` fallback slices *files* rather than events, and with a single `train.parquet` that would yield an empty train set.
+
+Note the consequence: `standard` and `holdout`/`2fold` deliberately run through different data-loading code paths. Don't "simplify" them to match.
+
+Neither template takes a literal API-key placeholder — both reference `${WANDB_API_KEY:?...}` and expect the value to already be in the submitting shell's environment. Export it and run `sbatch` in the *same* shell command (`export WANDB_API_KEY="<value>" && sbatch <script>`) so the literal value only ever exists transiently in that one process's environment, never written to any file. Both templates already run `train.py` then `predict.py` in sequence, with an exit-code guard skipping prediction if training fails. Submit with `sbatch`. For `standard`/`holdout`, that's **one** script and **one** submission. For `2fold` only, generate two scripts (`_fold0`/`_fold1`) and submit both.
 
 **Docker**: copy `job_submit_docker.sh`, fill placeholders. Same rule — export `WANDB_API_KEY` in the calling shell rather than writing it into the file; the template passes it through via `-e WANDB_API_KEY` (no `=value`). Run with `run_in_background=True` via the Bash tool.
 
@@ -78,7 +113,7 @@ Don't write API keys into any file with world/group-readable permissions if avoi
 
 ## Step 5: Monitor to completion
 
-**NERSC**: poll `squeue -j <JOB_ID> --noheader`. If still listed, use `ScheduleWakeup` (don't busy-poll — space checks out, longer if the partition looks congested; check `squeue -p <partition> --noheader | wc -l` once to gauge congestion and pick an interval, e.g. ~1200s if queue depth is in the thousands). Once it leaves the queue, confirm with `sacct -j <JOB_ID> --format=JobID,State,ExitCode --noheader`. If `COMPLETED`/`0:0`, don't treat that alone as success — see Step 6 below before reporting. For 2-fold, monitor both job IDs and wait for both.
+**NERSC**: poll `squeue -j <JOB_ID> --noheader`. If still listed, use `ScheduleWakeup` (don't busy-poll — space checks out, longer if the partition looks congested; check `squeue -p <partition> --noheader | wc -l` once to gauge congestion and pick an interval, e.g. ~1200s if queue depth is in the thousands). Once it leaves the queue, confirm with `sacct -j <JOB_ID> --format=JobID,State,ExitCode --noheader`. If `COMPLETED`/`0:0`, don't treat that alone as success — see Step 6 below before reporting. For `2fold` only, monitor both job IDs and wait for both; `standard`/`holdout` have exactly one job.
 
 **Docker**: wait for the background-process completion notification.
 
