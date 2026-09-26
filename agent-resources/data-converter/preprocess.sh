@@ -8,7 +8,8 @@
 #   cd run/<project_name>
 #   bash preprocess.sh
 #
-# For 2-fold mode: remove the --val line and change symlink loop to "train test"
+# For no-val modes (holdout OR 2fold -- both produce no val.npz): remove the
+# --val line and change symlink loop to "train test"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -22,7 +23,7 @@ python3 ../../preprocessing/preprocess.py \
   --store_dir data_processed/parquet \
   --val data_processed/npz/val.npz
 
-# 2-fold mode (no val): uncomment below and comment out above
+# no-val mode (holdout or 2fold): uncomment below and comment out above
 # python3 ../../preprocessing/preprocess.py \
 #   --config config/<project_name>.yaml \
 #   --train data_processed/npz/train.npz \
@@ -38,7 +39,7 @@ for split in train val test; do
   ln -sfn "../shape_metadata.json" "$BASE_DIR/$split/shape_metadata.json"
 done
 
-# 2-fold mode: uncomment below and comment out above
+# no-val mode (holdout or 2fold): uncomment below and comment out above
 # mkdir -p "$BASE_DIR"/{train,test}
 # for split in train test; do
 #   ln -sfn "../${split}.parquet" "$BASE_DIR/$split/${split}.parquet"
