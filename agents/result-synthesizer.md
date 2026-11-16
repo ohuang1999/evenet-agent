@@ -77,6 +77,14 @@ Three plots. All need the true class label (see the Classification ground-truth 
 
 Efficiencies are weighted: `ε_S(threshold)` = (Σ`event_weight` over true-signal events passing) / (Σ`event_weight` over all true-signal events), and analogously for `ε_B`.
 
+## Where your files go
+
+- `<run_dir>/analysis/` — every script you write (selection, binning, fits, plotting), runnable as-is to
+  reproduce your numbers from this run's inputs.
+- `<run_dir>/results/` — the outputs: tables and numbers (e.g. `results.json` / CSV), plots, fit inputs
+  (e.g. a pyhf workspace JSON).
+- Report paths in your output and in the success report's `artifact_paths`. Nothing goes outside `<run_dir>`.
+
 ## Step 1: Compute
 
 Read the reconverted output — `uproot` if ROOT, `torch.load` if `.pt` (match whichever format `data-reconverter` actually produced, don't assume ROOT by default). Implement the plan's observable. Report your methodology explicitly in the output — every formula/convention choice you made, so a physicist can check it, not just the final number.

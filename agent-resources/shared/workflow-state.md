@@ -1,6 +1,6 @@
 # Workflow state and failure-recovery conventions
 
-Shared reference for every post-approval pipeline agent (`data-converter`, `fine-tuner`, `predictor`, `data-reconverter`, `result-synthesizer`) and for the top-level orchestrator (`CLAUDE.md`'s "Failure-directed recovery" section). Defines the one schema and taxonomy everyone uses, so it's written once here rather than re-stated per agent.
+Shared reference for every post-approval pipeline agent (`mc-generator`, `data-converter`, `fine-tuner`, `predictor`, `data-reconverter`, `result-synthesizer`) and for the top-level orchestrator (`CLAUDE.md`'s "Failure-directed recovery" section). Defines the one schema and taxonomy everyone uses, so it's written once here rather than re-stated per agent.
 
 **The core principle**: agent invocations are stateless — each one runs once and returns. The run itself is stateful through explicit files in `<run_dir>`. A restarted or repair-mode-re-entered agent reconstructs its context by reading those files, never by assuming it (or the orchestrator) remembers a previous invocation.
 
@@ -12,11 +12,32 @@ One per post-approval agent, used as the directory name for that stage's reports
 
 | Stage ID | Agent | Phase |
 |---|---|---|
+| `mc_generation` | `mc-generator` | Phase 0 (MC generation branch only; runs before the full plan) |
 | `data_conversion` | `data-converter` | Phase 1 |
 | `fine_tuning` | `fine-tuner` | Phase 2 |
 | `prediction` | `predictor` | (validates Phase 2's predict output, or runs its own) |
 | `data_reconversion` | `data-reconverter` | Phase 3 |
 | `result_synthesis` | `result-synthesizer` | — |
+
+### `mc_generation`: extra state
+
+`mc-generator` returns while MadAgents works or Slurm jobs run, so its stage has statuses the others don't, and a few fields the orchestrator needs to resume it:
+
+```yaml
+stages:
+  mc_generation:
+    status: not_started | running | waiting_on_user | waiting_on_jobs | madagents_running | completed | failed
+    attempts: <N>
+    madagents_dir: <absolute path of the MadAgents install folder the user gave — recorded so a resume in a new session works from files alone>
+    madagents_session_id: <uuid from the CLI's JSON output>
+    madagents_turns: <number of turns so far>
+    madagents_cost_usd: <sum of total_cost_usd over turns — an upper bound if the CLI reports cumulative cost>
+    slurm_jobs: [<jobid>, ...]          # the latest batch MadAgents submitted
+    escalation: <path to the open escalation_<n>.md, if waiting_on_user>
+    pending_turn: <NNN, if madagents_running>
+```
+
+`waiting_on_*` and `madagents_running` are not failures and do not count as attempts; an attempt ends with a success or failure report.
 
 ## Report file locations
 

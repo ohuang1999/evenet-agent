@@ -1,6 +1,6 @@
 # EveNet Physics-Analysis Agents
 
-An agentic AI pipeline for [Claude Code](https://claude.com/claude-code) that plans and runs physics analyses on top of [EveNet](https://arxiv.org/abs/2601.17126), a foundation model for collider-physics event data. Six coordinated subagents take a plain-language physics request through planning, data conversion, fine-tuning, prediction, export, and observable computation — with a single, explicit approval gate before anything actually runs.
+An agentic AI pipeline for [Claude Code](https://claude.com/claude-code) that plans and runs physics analyses on top of [EveNet](https://arxiv.org/abs/2601.17126), a foundation model for collider-physics event data. Seven coordinated subagents take a plain-language physics request through planning, optional Monte Carlo generation (via [MadAgents](https://github.com/MadGraphTeam/MadAgents)), data conversion, fine-tuning, prediction, export, and observable computation — with a single, explicit approval gate before anything actually runs.
 
 - **EveNet paper**: [arXiv:2601.17126](https://arxiv.org/abs/2601.17126)
 - **EveNet docs**: https://evenet-hep.github.io/EveNet-Full/
@@ -57,13 +57,14 @@ Claude will walk the pipeline below automatically. You'll see one plan to review
   parquet)            one combined job)      prediction)      ROOT/.pt output)    observable)
 ```
 
-**Only `physics-planner` talks to you.** Subagents invoked via the `Agent` tool run to completion and return a result — they have no live channel back to you mid-execution. So every question the pipeline needs answered (physics choices, wall-time, checkpoint override, output naming — everything) is gathered into `physics-planner`'s single plan and resolved in one approval exchange. None of the other five subagents ever ask you anything; they execute whatever the approved plan says. See `CLAUDE.md` for the full step-by-step orchestration logic.
+**Only `physics-planner` talks to you.** Subagents invoked via the `Agent` tool run to completion and return a result — they have no live channel back to you mid-execution. So every question the pipeline needs answered (physics choices, wall-time, checkpoint override, output naming — everything) is gathered into `physics-planner`'s single plan and resolved in one approval exchange. None of the other subagents ever ask you anything; they execute whatever the approved plan says (`mc-generator` hands questions MadAgents raises, that the plan doesn't answer, back to the orchestrator, which asks you). See `CLAUDE.md` for the full step-by-step orchestration logic.
 
-## The six subagents
+## The seven subagents
 
 | Agent | Does |
 |---|---|
 | `physics-planner` | Inspects the actual input data (never trusts a description of it), proposes head(s), slot mapping, targets, split mode, and everything else downstream needs. Read-only — never executes anything. |
+| `mc-generator` | Optional, when the samples don't exist yet. Drives a headless [MadAgents](https://github.com/MadGraphTeam/MadAgents) session from the approved MC plan: answers its questions only from the plan or a named reference run and escalates the rest to you, returns while Slurm jobs run (the orchestrator waits with a token-free shell loop), then validates the samples (cards, σ, event counts vs targets) and writes `samples.csv`. Two approval gates: the MC plan, then the full plan on the generated samples. |
 | `data-converter` | Converts ROOT or `.pt` input into EveNet's point-cloud npz/parquet format per the approved plan. |
 | `fine-tuner` | Generates the finetune/predict YAMLs, submits fine-tuning + prediction as one combined NERSC/Docker job, monitors it to completion. |
 | `predictor` | Validates the prediction `.pt` output (or runs a standalone prediction if invoked without an upstream `fine-tuner` job). |
@@ -92,6 +93,7 @@ Both ROOT (`.root` ntuples) and `.pt` (PyTorch tensor files, for users without R
 CLAUDE.md                          Orchestration logic — auto-loaded every session
 agents/
   physics-planner.md               Plans; read-only; the only agent that "talks" to you
+  mc-generator.md                  MC production through a headless MadAgents session (optional)
   data-converter.md                ROOT/.pt -> npz/parquet
   fine-tuner.md                    Fine-tuning + prediction (combined Slurm/Docker job)
   predictor.md                     Validates prediction output
@@ -99,6 +101,7 @@ agents/
   result-synthesizer.md            Computes the physics observable
 agent-resources/
   setup/setup.md                   One-time environment setup (repo clone, container, W&B, weights)
+  mc-generator/                    MadAgents relay + wait scripts, request template, samples.csv schema
   data-converter/                  event_info template, data-prep scripts
   fine-tuner/                      finetune/predict templates, job-submission scripts
   predictor/                       predict template (standalone-mode fallback)
